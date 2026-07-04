@@ -10,6 +10,17 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
+option(TYCHE_ENABLE_COVERAGE "Enable gcov/lcov coverage instrumentation" OFF)
+if(TYCHE_ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "TycheEngine coverage instrumentation enabled")
+        add_compile_options(--coverage -O0 -g)
+        add_link_options(--coverage)
+    else()
+        message(WARNING "TYCHE_ENABLE_COVERAGE is only supported for GNU/Clang compilers")
+    endif()
+endif()
+
 # ── 项目根目录 ──
 get_filename_component(TYCHE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 set(TYCHE_ROOT "${TYCHE_ROOT}" CACHE PATH "TycheEngine root directory")
