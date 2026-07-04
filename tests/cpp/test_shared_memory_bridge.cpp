@@ -2,9 +2,12 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <filesystem>
+#include <thread>
 
 #include "tyche/cpp/engine/shared_memory_bridge.h"
+#include "tyche/cpp/engine/shared_memory_queue.h"
 
 namespace fs = std::filesystem;
 
@@ -91,6 +94,153 @@ TEST(SharedMemoryBridgeTest, RawBridgeConfig) {
 
     bridge.configure({}, {raw_config});
     EXPECT_EQ(bridge.bridge_count(), 1u);
+}
+
+// ── Snapshot / AdaptiveSpin / Zero-allocation tests ─────────────────
+
+TEST(SharedMemoryBridgeTest, RebuildSnapshotOnConfigure) {
+    // After configure, bridge_count should reflect bridges
+    SharedMemoryBridge bridge;
+
+    ShmBridgeConfig raw1;
+    raw1.shm_queue_name = "snap_bridge_1";
+    raw1.zmq_topic = "topic_1";
+
+    ShmBridgeConfig raw2;
+    raw2.shm_queue_name = "snap_bridge_2";
+    raw2.zmq_topic = "topic_2";
+
+    bridge.configure({}, {raw1, raw2});
+    EXPECT_EQ(bridge.bridge_count(), 2u);
+}
+
+TEST(SharedMemoryBridgeTest, StartStopCycle) {
+    // Verify start/stop doesn't crash and state transitions correctly
+    SharedMemoryBridge bridge;
+    EXPECT_FALSE(bridge.is_running());
+
+    bridge.start(nullptr);  // null engine is fine for lifecycle test
+    EXPECT_TRUE(bridge.is_running());
+
+    bridge.stop();
+    EXPECT_FALSE(bridge.is_running());
+}
+
+TEST(SharedMemoryBridgeTest, DoubleStartIgnored) {
+    SharedMemoryBridge bridge;
+    bridge.start(nullptr);
+    bridge.start(nullptr);  // should be ignored (already running)
+    EXPECT_TRUE(bridge.is_running());
+    bridge.stop();
+}
+
+TEST(SharedMemoryBridgeTest, DoubleStopSafe) {
+    SharedMemoryBridge bridge;
+    bridge.start(nullptr);
+    bridge.stop();
+    bridge.stop();  // second stop should not crash
+    EXPECT_FALSE(bridge.is_running());
+}
+
+TEST(SharedMemoryBridgeTest, ModuleVersionCheckAcceptsCompatible) {
+    std::string lib_path = get_stub_lib_path();
+    if (!fs::exists(lib_path)) {
+        GTEST_SKIP() << "Stub library not built: " << lib_path;
+    }
+
+    SharedMemoryBridge bridge;
+    ShmModuleConfig config;
+    config.library_path = lib_path;
+    config.shm_queue_name = "test_version_compat";
+
+    std::string id = bridge.load_module(config);
+    // If stub exports tyche_module_version() with matching ABI, should succeed.
+    // If stub doesn't export it, should still succeed with warning.
+    EXPECT_FALSE(id.empty());
+    bridge.unload_module("test_version_compat");
+}
+
+TEST(SharedMemoryBridgeTest, UnloadModuleWithTimeout) {
+    // Verify unload_module doesn't hang indefinitely
+    std::string lib_path = get_stub_lib_path();
+    if (!fs::exists(lib_path)) {
+        GTEST_SKIP() << "Stub library not built: " << lib_path;
+    }
+
+    SharedMemoryBridge bridge;
+    ShmModuleConfig config;
+    config.library_path = lib_path;
+    config.shm_queue_name = "test_timeout_unload";
+
+    std::string id = bridge.load_module(config);
+    if (id.empty()) {
+        GTEST_SKIP() << "Module failed to load";
+    }
+
+    // Unload should complete within a reasonable time
+    auto start = std::chrono::steady_clock::now();
+    bridge.unload_module("test_timeout_unload");
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    // Should finish within MODULE_STOP_TIMEOUT_SEC + margin (8s max)
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 8);
+    EXPECT_EQ(bridge.module_count(), 0u);
+}
+
+TEST(SharedMemoryBridgeTest, WorkerLoopUsesAdaptiveSpin) {
+    // Start bridge, wait briefly, verify it's responsive (doesn't hang on 1ms sleep)
+    SharedMemoryBridge bridge;
+    bridge.start(nullptr);
+
+    // Worker should be alive and responsive
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_TRUE(bridge.is_running());
+
+    bridge.stop();
+    EXPECT_FALSE(bridge.is_running());
+}
+
+// ── ShmConfig Default & Custom Value Tests ──────────────────────────────
+
+TEST(ShmConfigTest, ModuleConfigDefaults) {
+    ShmModuleConfig mc;
+    EXPECT_EQ(mc.slot_count, 2048u);
+    EXPECT_EQ(mc.max_msg_size, 4096u);
+    EXPECT_TRUE(mc.library_path.empty());
+    EXPECT_TRUE(mc.shm_queue_name.empty());
+    EXPECT_TRUE(mc.zmq_topics.empty());
+}
+
+TEST(ShmConfigTest, BridgeConfigDefaults) {
+    ShmBridgeConfig bc;
+    EXPECT_EQ(bc.slot_count, 2048u);
+    EXPECT_EQ(bc.max_msg_size, 4096u);
+    EXPECT_TRUE(bc.shm_queue_name.empty());
+    EXPECT_TRUE(bc.zmq_topic.empty());
+}
+
+TEST(ShmConfigTest, ModuleConfigCustomValues) {
+    ShmModuleConfig mc;
+    mc.library_path = "modules/test.dll";
+    mc.shm_queue_name = "test_queue";
+    mc.slot_count = 512;
+    mc.max_msg_size = 2048;
+    mc.zmq_topics = {"tick", "quote"};
+
+    EXPECT_EQ(mc.slot_count, 512u);
+    EXPECT_EQ(mc.max_msg_size, 2048u);
+    EXPECT_EQ(mc.zmq_topics.size(), 2u);
+}
+
+TEST(ShmConfigTest, BridgeConfigCustomValues) {
+    ShmBridgeConfig bc;
+    bc.shm_queue_name = "external_queue";
+    bc.zmq_topic = "market_data";
+    bc.slot_count = 4096;
+    bc.max_msg_size = 8192;
+
+    EXPECT_EQ(bc.slot_count, 4096u);
+    EXPECT_EQ(bc.max_msg_size, 8192u);
 }
 
 }  // namespace

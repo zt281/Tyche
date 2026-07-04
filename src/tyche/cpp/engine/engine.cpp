@@ -7,6 +7,7 @@
 #include "tyche/cpp/engine/engine.h"
 #include "tyche/cpp/engine/shared_memory_bridge.h"
 #include "tyche/cpp/engine/adaptive_spin.h"
+#include "tyche/cpp/engine/fast_clock.h"
 
 #include <zmq.hpp>
 #include <zmq_addon.hpp>
@@ -61,6 +62,10 @@ double TycheEngine::_now() {
     return std::chrono::duration<double>(tp.time_since_epoch()).count();
 }
 
+double TycheEngine::_now_fast() noexcept {
+    return tyche::FastClock::now();
+}
+
 // ── Constructor / Destructor ────────────────────────────────────────
 
 TycheEngine::TycheEngine(
@@ -95,6 +100,9 @@ TycheEngine::~TycheEngine() {
 void TycheEngine::start_nonblocking() {
     _zmq_ctx = std::make_unique<ZmqContext>();
     _running.store(true, std::memory_order_release);
+
+    // Start FastClock calibration thread before workers
+    tyche::FastClock::start_calibration();
 
     _threads.emplace_back(&TycheEngine::_registration_worker, this);
     _threads.emplace_back(&TycheEngine::_registration_egress_worker, this);
@@ -149,8 +157,11 @@ void TycheEngine::stop() {
         if (t.joinable()) t.join();
     }
     _threads.clear();
-    _zmq_ctx.reset();
     std::cerr << "[TycheEngine] Shutdown complete" << std::endl;
+
+    // Stop FastClock after all workers have exited
+    tyche::FastClock::stop_calibration();
+    _zmq_ctx.reset();
 }
 
 // ── Event injection (for SharedMemoryBridge) ────────────────────────
@@ -163,8 +174,9 @@ void TycheEngine::inject_event(const std::string& topic,
     frames.emplace_back(message_data.data(), message_data.size());
 
     auto q = _topic_queues.get_or_create(topic, static_cast<size_t>(_queue_capacity));
-    q->put(QueueItem(_now(), std::move(frames)));
-    _topic_queues.touch(topic, _now());
+    double t = _now_fast();
+    q->put(QueueItem(t, std::move(frames)));
+    _topic_queues.touch(topic, t);
 
     {
         std::lock_guard lock(_egress_wakeup_lock);
@@ -181,8 +193,9 @@ void TycheEngine::inject_event_raw(const std::string& topic,
     frames.emplace_back(data, size);
 
     auto q = _topic_queues.get_or_create(topic, static_cast<size_t>(_queue_capacity));
-    q->put(QueueItem(_now(), std::move(frames)));
-    _topic_queues.touch(topic, _now());
+    double t = _now_fast();
+    q->put(QueueItem(t, std::move(frames)));
+    _topic_queues.touch(topic, t);
 
     {
         std::lock_guard lock(_egress_wakeup_lock);
@@ -323,8 +336,9 @@ void TycheEngine::_enqueue_from_xsub(
     }
 
     // 4. 入队
-    q->put(QueueItem(_now(), std::vector<Frame>(fixed_frames, fixed_frames + n)));
-    _topic_queues.touch(std::string(topic_sv), _now());
+    double t = _now_fast();
+    q->put(QueueItem(t, std::vector<Frame>(fixed_frames, fixed_frames + n)));
+    _topic_queues.touch(std::string(topic_sv), t);
 
     // 5. 唤醒 egress worker
     {
@@ -524,8 +538,8 @@ void TycheEngine::_heartbeat_worker() {
         } catch (const zmq::error_t& e) {
             if (e.num() == ETERM) break;
         }
-        for (int i = 0; i < 10 && _running.load(std::memory_order_relaxed); ++i)
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        for (int i = 0; i < 100 && _running.load(std::memory_order_relaxed); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     socket.close();
 }
@@ -896,8 +910,8 @@ void TycheEngine::_job_timeout_worker() {
             for (auto& ev : events)
                 _job_timeout_events.push(std::move(ev));
         }
-        for (int i = 0; i < 10 && _running.load(std::memory_order_relaxed); ++i)
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        for (int i = 0; i < 100 && _running.load(std::memory_order_relaxed); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -915,7 +929,7 @@ void TycheEngine::_monitor_worker() {
         // then GC using sharded map per-bucket locks (OPT-2).
         // _topic_subscribers / _topic_producers use InternId keys; we resolve
         // them to strings via _intern for comparison with ShardedTopicQueueMap.
-        double now = _now();
+        double now = _now_fast();
         std::unordered_set<std::string> active_topics;
         {
             std::shared_lock mlock(_modules_lock);
@@ -936,8 +950,8 @@ void TycheEngine::_monitor_worker() {
             }
         }
 
-        for (int i = 0; i < 10 && _running.load(std::memory_order_relaxed); ++i)
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        for (int i = 0; i < 100 && _running.load(std::memory_order_relaxed); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -974,7 +988,7 @@ void TycheEngine::_event_proxy_worker() {
         // XPUB → XSUB: forward subscription/unsubscription messages
         if (items[0].revents & ZMQ_POLLIN) {
             std::vector<zmq::message_t> frames;
-            zmq::recv_multipart(xpub, std::back_inserter(frames));
+            (void)zmq::recv_multipart(xpub, std::back_inserter(frames));
             for (size_t i = 0; i < frames.size(); ++i) {
                 auto f = (i + 1 < frames.size()) ? zmq::send_flags::sndmore
                                                   : zmq::send_flags::none;
@@ -1041,7 +1055,7 @@ void TycheEngine::_event_egress_worker() {
                 had_work = true;
                 spinner.reset();
 
-                double now = _now();
+                double now = _now_fast();
                 if (now - item->enqueue_time > _broadcast_ttl) {
                     try {
                         const auto& fr = item->frames;
@@ -1051,7 +1065,7 @@ void TycheEngine::_event_egress_worker() {
                     } catch (...) {}
                 }
 
-                _topic_queues.touch(topic, _now());
+                _topic_queues.touch(topic, now);
             }
         }
 

@@ -1,106 +1,75 @@
 cmake_minimum_required(VERSION 3.16)
 project(TycheEngine CXX)
+enable_testing()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# MSVC: UTF-8 编码处理源文件，避免 C4819 警告
 if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
-# ── 覆盖率支持 ──────────────────────────────────────────────────────
-option(TYCHE_ENABLE_COVERAGE "Enable code coverage reporting" OFF)
+option(TYCHE_ENABLE_COVERAGE "Enable gcov/lcov coverage instrumentation" OFF)
 if(TYCHE_ENABLE_COVERAGE)
-    if(MSVC)
-        message(STATUS "Code coverage enabled for MSVC: adding /PROFILE linker option")
-        # /PROFILE enables code coverage profiling with VS Enterprise/CodeCoverage
-        add_link_options(/PROFILE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "TycheEngine coverage instrumentation enabled")
+        add_compile_options(--coverage -O0 -g)
+        add_link_options(--coverage)
     else()
-        message(STATUS "Code coverage enabled: adding -fprofile-arcs -ftest-coverage")
-        add_compile_options(-fprofile-arcs -ftest-coverage)
-        add_link_options(-fprofile-arcs -ftest-coverage)
+        message(WARNING "TYCHE_ENABLE_COVERAGE is only supported for GNU/Clang compilers")
     endif()
 endif()
 
-# ── 自动检测 Visual Studio 生成器（仅限 Windows）───────────────
-# CMake 3.16+ 支持通过 -G 指定生成器。若用户未显式指定，且当前为 Windows
-# 平台，则尝试用 vswhere 自动查找最新可用的 Visual Studio 实例。
-if(WIN32 AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
-    set(VSWHERE_PATH "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
-    if(EXISTS ${VSWHERE_PATH})
-        execute_process(
-            COMMAND ${VSWHERE_PATH} -latest -prerelease -property catalog_productLineVersion
-            OUTPUT_VARIABLE VS_PRODUCT_LINE
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-            RESULT_VARIABLE VSWHERE_RESULT
-        )
-        if(VSWHERE_RESULT EQUAL 0 AND VS_PRODUCT_LINE)
-            execute_process(
-                COMMAND ${VSWHERE_PATH} -latest -prerelease -property installationVersion
-                OUTPUT_VARIABLE VS_INSTALL_VERSION
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-                ERROR_QUIET
-            )
-            # 提取主版本号（如 18.5.2 -> 18）
-            string(REGEX MATCH "^([0-9]+)" VS_MAJOR "${VS_INSTALL_VERSION}")
-            if(VS_MAJOR)
-                set(CMAKE_GENERATOR "Visual Studio ${VS_PRODUCT_LINE} ${VS_MAJOR}" CACHE INTERNAL "Detected VS generator" FORCE)
-                message(STATUS "Auto-detected Visual Studio generator: ${CMAKE_GENERATOR}")
-            endif()
-        endif()
-    endif()
-endif()
+# ── 项目根目录 ──
+get_filename_component(TYCHE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
+set(TYCHE_ROOT "${TYCHE_ROOT}" CACHE PATH "TycheEngine root directory")
 
-# 统一产物输出目录（按平台分离）
+# ── 构建产物分类目录（按功能 × 平台） ──
+# 结构：build/{unit_tests,perf_tests,executables,libraries}/{linux,win}/
+set(TYCHE_BUILD_DIR "${TYCHE_ROOT}/build")
+
 if(WIN32)
-    set(TYCHE_RUNTIME_DIR "${CMAKE_SOURCE_DIR}/runtime/win")
+    set(TYCHE_PLATFORM "win")
 else()
-    set(TYCHE_RUNTIME_DIR "${CMAKE_SOURCE_DIR}/runtime/linux")
+    set(TYCHE_PLATFORM "linux")
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TYCHE_RUNTIME_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${TYCHE_RUNTIME_DIR})
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${TYCHE_RUNTIME_DIR})
+# 功能分类子目录
+set(TYCHE_UNIT_TEST_DIR "${TYCHE_BUILD_DIR}/unit_tests/${TYCHE_PLATFORM}")
+set(TYCHE_PERF_TEST_DIR "${TYCHE_BUILD_DIR}/perf_tests/${TYCHE_PLATFORM}")
+set(TYCHE_EXECUTABLE_DIR "${TYCHE_BUILD_DIR}/executables/${TYCHE_PLATFORM}")
+set(TYCHE_LIBRARY_DIR "${TYCHE_BUILD_DIR}/libraries/${TYCHE_PLATFORM}")
 
-# 按配置区分子目录（Debug / Release / RelWithDebInfo / MinSizeRel）
+# 创建目录
+file(MAKE_DIRECTORY "${TYCHE_UNIT_TEST_DIR}")
+file(MAKE_DIRECTORY "${TYCHE_PERF_TEST_DIR}")
+file(MAKE_DIRECTORY "${TYCHE_EXECUTABLE_DIR}")
+file(MAKE_DIRECTORY "${TYCHE_LIBRARY_DIR}")
+
+# ── 全局默认输出目录 ──
+# 默认情况下，可执行文件 -> executables，库 -> libraries
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${TYCHE_EXECUTABLE_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${TYCHE_LIBRARY_DIR}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${TYCHE_LIBRARY_DIR}")
+
 foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
     string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG_UPPER)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_RUNTIME_DIR})
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_RUNTIME_DIR})
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_RUNTIME_DIR})
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} "${TYCHE_EXECUTABLE_DIR}")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} "${TYCHE_LIBRARY_DIR}")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} "${TYCHE_LIBRARY_DIR}")
 endforeach()
 
-# ── 子项目 ──────────────────────────────────────────────────────
+message(STATUS "TycheEngine build output structure:")
+message(STATUS "  Unit tests:   ${TYCHE_UNIT_TEST_DIR}")
+message(STATUS "  Perf tests:   ${TYCHE_PERF_TEST_DIR}")
+message(STATUS "  Executables:  ${TYCHE_EXECUTABLE_DIR}")
+message(STATUS "  Libraries:    ${TYCHE_LIBRARY_DIR}")
+
+# ── 第三方库目录 ──
+set(THIRD_PARTY_DIR "${TYCHE_ROOT}/third_party" CACHE PATH "Third-party directory")
+
+# ── 子项目 ──
 add_subdirectory(src/tyche/cpp)
 add_subdirectory(src/modules/ctp_gateway_cpp)
 add_subdirectory(tests)
-
-# ── 覆盖率报告目标 ───────────────────────────────
-if(TYCHE_ENABLE_COVERAGE)
-    if(MSVC)
-        # Windows: provide instructions for VS Enterprise CodeCoverage or OpenCppCoverage
-        add_custom_target(coverage
-            COMMAND ${CMAKE_COMMAND} -E echo "Windows coverage: use OpenCppCoverage or VS Enterprise CodeCoverage"
-            COMMAND ${CMAKE_COMMAND} -E echo "Example: OpenCppCoverage.exe --modules tyche_tests.exe --export_type=html:coverage_report -- runtime\\win\\tyche_tests.exe"
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            COMMENT "Coverage instructions for Windows..."
-        )
-    else()
-        find_program(LCOV lcov)
-        find_program(GENHTML genhtml)
-        if(LCOV AND GENHTML)
-            add_custom_target(coverage
-                COMMAND ${LCOV} --capture --directory . --output-file coverage.info
-                COMMAND ${LCOV} --remove coverage.info '/usr/*' '*/third_party/*' '*/tests/*' --output-file coverage.info
-                COMMAND ${GENHTML} coverage.info --output-directory coverage_report
-                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-                COMMENT "Generating coverage report..."
-            )
-        else()
-            message(WARNING "lcov/genhtml not found; coverage target will not be available")
-        endif()
-    endif()
-endif()

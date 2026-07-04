@@ -74,7 +74,6 @@ The C++ layer (`src/tyche/cpp/`) provides high-performance primitives for the ho
 | **RingBuffer** | `engine/ring_buffer.h` | Lock-free SPSC queue for inter-thread communication |
 | **ShardedTopicMap** | `engine/sharded_topic_map.h` | Lock-free topic-to-handler routing |
 | **SharedMemoryBridge** | `engine/shared_memory_bridge.h` | Zero-copy IPC between C++ modules |
-| **ObjectPool** | `engine/object_pool.h` | Pre-allocated object cache to eliminate heap allocation |
 | **RCUSnapshot** | `engine/rcu_snapshot.h` | Read-copy-update for lock-free config updates |
 | **FastClock** | `engine/fast_clock.h` | High-resolution timestamping (`QueryPerformanceCounter` on Windows) |
 | **AdaptiveSpin** | `engine/adaptive_spin.h` | Exponential backoff spinlock for sub-μs synchronization |

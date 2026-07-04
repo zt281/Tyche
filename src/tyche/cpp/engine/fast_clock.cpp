@@ -70,7 +70,7 @@ static inline uint64_t read_tsc() noexcept {
 void FastClock::_calibration_loop() {
     constexpr int64_t CALIBRATION_INTERVAL_US = 1000;  // 1ms
 
-    // Initial calibration: establish tsc_to_ns ratio
+    // Initial calibration: establish tsc_to_ns ratio (monotonic clock base)
     uint64_t tsc0 = read_tsc();
     int64_t ns0 = _system_now_ns();
 
@@ -164,6 +164,7 @@ void FastClock::stop_calibration() {
 }
 
 void FastClock::calibrate() noexcept {
+    // Seed _cached_ns with current monotonic clock value
     int64_t ns = _system_now_ns();
     _cached_ns.store(ns, std::memory_order_relaxed);
 }

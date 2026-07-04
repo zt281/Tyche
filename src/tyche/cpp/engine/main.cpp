@@ -6,6 +6,7 @@
 #include <atomic>
 #include <csignal>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -16,6 +17,23 @@
 
 static std::atomic<bool> g_shutdown_requested{false};
 static tyche::TycheEngine* g_engine = nullptr;
+
+static std::string resolve_config_relative_path(const std::string& value,
+                                                const std::string& config_path) {
+    if (value.empty() || config_path.empty()) {
+        return value;
+    }
+
+    std::filesystem::path candidate(value);
+    if (candidate.is_absolute()) {
+        return value;
+    }
+
+    std::filesystem::path config_file(config_path);
+    std::filesystem::path base =
+        config_file.has_parent_path() ? config_file.parent_path() : std::filesystem::current_path();
+    return (base / candidate).lexically_normal().string();
+}
 
 #ifdef _WIN32
 BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
@@ -70,7 +88,8 @@ static bool parse_json_config(const std::string& path, Config& cfg) {
             for (const auto& m : j["shm_modules"]) {
                 tyche::ShmModuleConfig mc;
                 if (m.contains("library_path") && m["library_path"].is_string())
-                    mc.library_path = m["library_path"].get<std::string>();
+                    mc.library_path = resolve_config_relative_path(
+                        m["library_path"].get<std::string>(), path);
                 if (m.contains("shm_queue_name") && m["shm_queue_name"].is_string())
                     mc.shm_queue_name = m["shm_queue_name"].get<std::string>();
                 if (m.contains("zmq_topics") && m["zmq_topics"].is_array()) {
@@ -78,6 +97,10 @@ static bool parse_json_config(const std::string& path, Config& cfg) {
                         if (t.is_string()) mc.zmq_topics.push_back(t.get<std::string>());
                     }
                 }
+                if (m.contains("slot_count") && m["slot_count"].is_number())
+                    mc.slot_count = m["slot_count"].get<uint32_t>();
+                if (m.contains("max_msg_size") && m["max_msg_size"].is_number())
+                    mc.max_msg_size = m["max_msg_size"].get<uint32_t>();
                 if (!mc.library_path.empty() && !mc.shm_queue_name.empty()) {
                     cfg.shm_modules.push_back(std::move(mc));
                 }
@@ -92,6 +115,10 @@ static bool parse_json_config(const std::string& path, Config& cfg) {
                     bc.shm_queue_name = b["shm_queue_name"].get<std::string>();
                 if (b.contains("zmq_topic") && b["zmq_topic"].is_string())
                     bc.zmq_topic = b["zmq_topic"].get<std::string>();
+                if (b.contains("slot_count") && b["slot_count"].is_number())
+                    bc.slot_count = b["slot_count"].get<uint32_t>();
+                if (b.contains("max_msg_size") && b["max_msg_size"].is_number())
+                    bc.max_msg_size = b["max_msg_size"].get<uint32_t>();
                 if (!bc.shm_queue_name.empty() && !bc.zmq_topic.empty()) {
                     cfg.shm_bridges.push_back(std::move(bc));
                 }
@@ -100,6 +127,32 @@ static bool parse_json_config(const std::string& path, Config& cfg) {
     } catch (const std::exception& e) {
         std::cerr << "[TycheEngine] Error parsing config file: " << e.what() << "\n";
         return false;
+    }
+
+    // Validate SHM parameters (warnings only, don't reject)
+    for (const auto& mc : cfg.shm_modules) {
+        if (mc.slot_count < 64 || mc.slot_count > 65536) {
+            std::cerr << "[TycheEngine] Warning: slot_count " << mc.slot_count
+                      << " for module '" << mc.shm_queue_name
+                      << "' outside recommended range [64, 65536]\n";
+        }
+        if (mc.max_msg_size < 256 || mc.max_msg_size > 1048576) {
+            std::cerr << "[TycheEngine] Warning: max_msg_size " << mc.max_msg_size
+                      << " for module '" << mc.shm_queue_name
+                      << "' outside recommended range [256, 1MB]\n";
+        }
+    }
+    for (const auto& bc : cfg.shm_bridges) {
+        if (bc.slot_count < 64 || bc.slot_count > 65536) {
+            std::cerr << "[TycheEngine] Warning: slot_count " << bc.slot_count
+                      << " for bridge '" << bc.shm_queue_name
+                      << "' outside recommended range [64, 65536]\n";
+        }
+        if (bc.max_msg_size < 256 || bc.max_msg_size > 1048576) {
+            std::cerr << "[TycheEngine] Warning: max_msg_size " << bc.max_msg_size
+                      << " for bridge '" << bc.shm_queue_name
+                      << "' outside recommended range [256, 1MB]\n";
+        }
     }
 
     return true;
@@ -137,13 +190,17 @@ static void print_usage(const char* prog) {
               << "      {\n"
               << "        \"library_path\": \"modules/example.dll\",\n"
               << "        \"shm_queue_name\": \"tyche_shm_example\",\n"
-              << "        \"zmq_topics\": [\"tick\", \"quote\"]\n"
+              << "        \"zmq_topics\": [\"tick\", \"quote\"],\n"
+              << "        \"slot_count\": 2048,\n"
+              << "        \"max_msg_size\": 4096\n"
               << "      }\n"
               << "    ],\n"
               << "    \"shm_bridges\": [\n"
               << "      {\n"
               << "        \"shm_queue_name\": \"tyche_shm_external\",\n"
-              << "        \"zmq_topic\": \"market_data\"\n"
+              << "        \"zmq_topic\": \"market_data\",\n"
+              << "        \"slot_count\": 2048,\n"
+              << "        \"max_msg_size\": 4096\n"
               << "      }\n"
               << "    ]\n"
               << "  }\n";

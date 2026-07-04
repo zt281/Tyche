@@ -132,7 +132,7 @@ private:
 
 /// 队列中的单个条目：入队时间 + ZMQ 多帧消息
 struct QueueItem {
-    double enqueue_time = 0.0;    // epoch seconds
+    double enqueue_time = 0.0;    // monotonic seconds (from FastClock)
     std::vector<Frame> frames;    // ZMQ 多帧消息 (SSO-optimized)
 
     QueueItem() = default;

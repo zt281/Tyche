@@ -1,6 +1,0 @@
-[workspace]
-members = [
-    "src/tyche/rust",
-    "src/rust_module/example",
-]
-resolver = "2"

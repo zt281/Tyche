@@ -21,10 +21,10 @@ TEST(FastClockTest, NowReturnsReasonableValue) {
     FastClock::calibrate();
 
     double t = FastClock::now();
-    EXPECT_GT(t, 0.0);  // Should be positive (epoch relative)
+    EXPECT_GT(t, 0.0);  // Should be positive (monotonic clock)
 
-    // Should be within a reasonable range since system boot/epoch
-    // (QueryPerformanceCounter is relative to system boot, not program start)
+    // Should be within a reasonable range for monotonic clock since system boot
+    // (QueryPerformanceCounter / CLOCK_MONOTONIC: relative to system boot)
     EXPECT_LT(t, 86400.0 * 365.0 * 100.0);  // Less than ~100 years in seconds
 }
 
@@ -119,6 +119,27 @@ TEST(FastClockTest, NowLatencyIsLow) {
 
     // FastClock::now() should be under 50ns per call (cached atomic read)
     EXPECT_LT(avg_ns, 50.0) << "FastClock::now() avg latency = " << avg_ns << " ns";
+}
+
+TEST(FastClockTest, NowReturnsNonZeroWithoutCalibration) {
+    // Ensure calibration is stopped
+    tyche::FastClock::stop_calibration();
+
+    // now() should always return a positive value regardless of calibration state.
+    // After calibration has run, the cached value persists but is still valid.
+    double t = tyche::FastClock::now();
+    EXPECT_GT(t, 0.0) << "FastClock::now() must return positive value";
+
+    // Verify consistency: two consecutive calls should be close (within 100ms)
+    double t2 = tyche::FastClock::now();
+    EXPECT_NEAR(t, t2, 0.1) << "Consecutive now() calls should be close";
+
+    // now_precise() should also return positive
+    double tp = tyche::FastClock::now_precise();
+    EXPECT_GT(tp, 0.0);
+
+    // Both should be in the same ballpark (within 1 second)
+    EXPECT_NEAR(t, tp, 1.0) << "now() and now_precise() should be close";
 }
 
 }  // namespace

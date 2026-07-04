@@ -9,13 +9,17 @@
 
 #include "tyche/cpp/module.h"
 #include "tyche/cpp/message.h"
+#include "tyche/cpp/engine/shared_memory_queue.h"
 
 #include <zmq.hpp>
 #include <zmq_addon.hpp>
 #include <msgpack.hpp>
 
 #include <chrono>
+#include <cstdint>
+#include <cstring>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <random>
 #include <stdexcept>
@@ -67,7 +71,34 @@ TycheModule::~TycheModule() {
 // ── Lifecycle ──────────────────────────────────────────────────────
 
 void TycheModule::start() {
-    _start_workers();
+    (void)start_zmq_transport();
+}
+
+bool TycheModule::start_zmq_transport(int max_attempts,
+                                      int retry_interval_ms) {
+    if (is_registered()) {
+        return true;
+    }
+
+    if (max_attempts < 1) max_attempts = 1;
+    if (retry_interval_ms < 0) retry_interval_ms = 0;
+
+    for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+        if (!_running.load(std::memory_order_relaxed)) {
+            _start_workers();
+        }
+
+        if (is_registered()) {
+            return true;
+        }
+
+        if (attempt < max_attempts && retry_interval_ms > 0) {
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(retry_interval_ms));
+        }
+    }
+
+    return false;
 }
 
 void TycheModule::run() {
@@ -273,6 +304,97 @@ void TycheModule::send_event(
     zmq::message_t data_msg(buffer.data(), buffer.size());
     _impl->pub_socket->send(topic_msg, zmq::send_flags::sndmore);
     _impl->pub_socket->send(data_msg, zmq::send_flags::none);
+}
+
+void TycheModule::set_shared_memory_queue(SharedMemoryQueue* queue) noexcept {
+    std::lock_guard<std::mutex> lock(_shared_memory_lock);
+    _owned_shared_memory_queue.reset();
+    _shared_memory_queue = queue;
+}
+
+bool TycheModule::open_shared_memory_queue(
+    const ModuleSharedMemoryQueueConfig& config,
+    bool owner) {
+    if (config.name.empty()) {
+        return false;
+    }
+
+    auto queue = std::make_unique<SharedMemoryQueue>(
+        SharedMemoryQueue::Config{
+            config.name,
+            config.slot_count,
+            config.max_msg_size},
+        owner);
+
+    if (!queue->is_valid()) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(_shared_memory_lock);
+    _owned_shared_memory_queue = std::move(queue);
+    _shared_memory_queue = _owned_shared_memory_queue.get();
+    return true;
+}
+
+bool TycheModule::has_shared_memory_queue() const noexcept {
+    std::lock_guard<std::mutex> lock(_shared_memory_lock);
+    return _shared_memory_queue != nullptr && _shared_memory_queue->is_valid();
+}
+
+SharedMemoryQueue* TycheModule::shared_memory_queue() const noexcept {
+    std::lock_guard<std::mutex> lock(_shared_memory_lock);
+    return _shared_memory_queue;
+}
+
+bool TycheModule::send_event_shared_memory(
+    const std::string& event,
+    const Payload& payload,
+    std::optional<std::string> recipient) {
+    if (event.size() > std::numeric_limits<uint16_t>::max()) {
+        return false;
+    }
+
+    Message msg;
+    msg.msg_type = MessageType::EVENT;
+    msg.sender = module_id();
+    msg.event = event;
+    msg.payload = payload;
+    msg.recipient = std::move(recipient);
+
+    auto view = serialize_tls(msg);
+    if (view.size == 0) {
+        return false;
+    }
+
+    const auto topic_len = static_cast<uint16_t>(event.size());
+    constexpr size_t header_size = sizeof(uint16_t);
+    const size_t total_size = header_size + topic_len + view.size;
+
+    std::lock_guard<std::mutex> lock(_shared_memory_lock);
+    if (!_shared_memory_queue || !_shared_memory_queue->is_valid()) {
+        return false;
+    }
+
+    constexpr size_t stack_buffer_size = 4096;
+    if (total_size <= stack_buffer_size) {
+        uint8_t buffer[stack_buffer_size];
+        buffer[0] = static_cast<uint8_t>(topic_len & 0xFF);
+        buffer[1] = static_cast<uint8_t>((topic_len >> 8) & 0xFF);
+        if (topic_len > 0) {
+            std::memcpy(buffer + header_size, event.data(), topic_len);
+        }
+        std::memcpy(buffer + header_size + topic_len, view.data, view.size);
+        return _shared_memory_queue->write(buffer, total_size);
+    }
+
+    std::vector<uint8_t> buffer(total_size);
+    buffer[0] = static_cast<uint8_t>(topic_len & 0xFF);
+    buffer[1] = static_cast<uint8_t>((topic_len >> 8) & 0xFF);
+    if (topic_len > 0) {
+        std::memcpy(buffer.data() + header_size, event.data(), topic_len);
+    }
+    std::memcpy(buffer.data() + header_size + topic_len, view.data, view.size);
+    return _shared_memory_queue->write(buffer.data(), buffer.size());
 }
 
 void TycheModule::send_event_flat(const std::string& event, const FlatQuoteTick& tick) {

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "tyche/cpp/engine/engine.h"
+#include "tyche/cpp/engine/fast_clock.h"
 #include "tyche/cpp/message.h"
 
 namespace tyche {
@@ -23,11 +24,11 @@ namespace {
 TEST(EngineIntegrationTest, InjectEventsWhileRunning) {
     TycheEngine engine(
         {"127.0.0.1", 5605},   // reg
-        {"127.0.0.1", 5606},   // event
-        {"127.0.0.1", 5607},   // heartbeat pub
-        {"127.0.0.1", 5608},   // heartbeat recv
-        {"127.0.0.1", 5609},   // admin
-        {"127.0.0.1", 5610});  // job
+        {"127.0.0.1", 5606},   // event (event_sub = 5607)
+        {"127.0.0.1", 5608},   // heartbeat pub (must != 5607)
+        {"127.0.0.1", 5609},   // heartbeat recv
+        {"127.0.0.1", 5610},   // admin
+        {"127.0.0.1", 5611});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -50,11 +51,11 @@ TEST(EngineIntegrationTest, InjectEventsWhileRunning) {
 TEST(EngineIntegrationTest, InjectRawEventsWhileRunning) {
     TycheEngine engine(
         {"127.0.0.1", 5615},   // reg
-        {"127.0.0.1", 5616},   // event
-        {"127.0.0.1", 5617},   // heartbeat pub
-        {"127.0.0.1", 5618},   // heartbeat recv
-        {"127.0.0.1", 5619},   // admin
-        {"127.0.0.1", 5620});  // job
+        {"127.0.0.1", 5616},   // event (event_sub = 5617)
+        {"127.0.0.1", 5618},   // heartbeat pub (must != 5617)
+        {"127.0.0.1", 5619},   // heartbeat recv
+        {"127.0.0.1", 5620},   // admin
+        {"127.0.0.1", 5621});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -71,11 +72,11 @@ TEST(EngineIntegrationTest, InjectRawEventsWhileRunning) {
 TEST(EngineIntegrationTest, InjectMultipleTopicsWhileRunning) {
     TycheEngine engine(
         {"127.0.0.1", 5625},   // reg
-        {"127.0.0.1", 5626},   // event
-        {"127.0.0.1", 5627},   // heartbeat pub
-        {"127.0.0.1", 5628},   // heartbeat recv
-        {"127.0.0.1", 5629},   // admin
-        {"127.0.0.1", 5630});  // job
+        {"127.0.0.1", 5626},   // event (event_sub = 5627)
+        {"127.0.0.1", 5628},   // heartbeat pub (must != 5627)
+        {"127.0.0.1", 5629},   // heartbeat recv
+        {"127.0.0.1", 5630},   // admin
+        {"127.0.0.1", 5631});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -94,11 +95,11 @@ TEST(EngineIntegrationTest, InjectMultipleTopicsWhileRunning) {
 TEST(EngineIntegrationTest, RegisterModuleWhileRunning) {
     TycheEngine engine(
         {"127.0.0.1", 5585},   // reg
-        {"127.0.0.1", 5586},   // event
-        {"127.0.0.1", 5587},   // heartbeat pub
-        {"127.0.0.1", 5588},   // heartbeat recv
-        {"127.0.0.1", 5589},   // admin
-        {"127.0.0.1", 5590});  // job
+        {"127.0.0.1", 5586},   // event (event_sub = 5587)
+        {"127.0.0.1", 5588},   // heartbeat pub (must != 5587)
+        {"127.0.0.1", 5589},   // heartbeat recv
+        {"127.0.0.1", 5590},   // admin
+        {"127.0.0.1", 5591});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -120,11 +121,11 @@ TEST(EngineIntegrationTest, RegisterModuleWhileRunning) {
 TEST(EngineIntegrationTest, RegisterMultipleModulesWhileRunning) {
     TycheEngine engine(
         {"127.0.0.1", 5595},   // reg
-        {"127.0.0.1", 5596},   // event
-        {"127.0.0.1", 5597},   // heartbeat pub
-        {"127.0.0.1", 5598},   // heartbeat recv
-        {"127.0.0.1", 5599},   // admin
-        {"127.0.0.1", 5600});  // job
+        {"127.0.0.1", 5596},   // event (event_sub = 5597)
+        {"127.0.0.1", 5598},   // heartbeat pub (must != 5597)
+        {"127.0.0.1", 5599},   // heartbeat recv
+        {"127.0.0.1", 5600},   // admin
+        {"127.0.0.1", 5601});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -153,11 +154,11 @@ TEST(EngineIntegrationTest, RegisterMultipleModulesWhileRunning) {
 TEST(EngineIntegrationTest, RegisterJobHandlerWhileRunning) {
     TycheEngine engine(
         {"127.0.0.1", 5635},   // reg
-        {"127.0.0.1", 5636},   // event
-        {"127.0.0.1", 5637},   // heartbeat pub
-        {"127.0.0.1", 5638},   // heartbeat recv
-        {"127.0.0.1", 5639},   // admin
-        {"127.0.0.1", 5640});  // job
+        {"127.0.0.1", 5636},   // event (event_sub = 5637)
+        {"127.0.0.1", 5638},   // heartbeat pub (must != 5637)
+        {"127.0.0.1", 5639},   // heartbeat recv
+        {"127.0.0.1", 5640},   // admin
+        {"127.0.0.1", 5641});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -181,11 +182,11 @@ TEST(EngineIntegrationTest, RegisterJobHandlerWhileRunning) {
 TEST(EngineIntegrationTest, HeartbeatManagerTracksModules) {
     TycheEngine engine(
         {"127.0.0.1", 5645},   // reg
-        {"127.0.0.1", 5646},   // event
-        {"127.0.0.1", 5647},   // heartbeat pub
-        {"127.0.0.1", 5648},   // heartbeat recv
-        {"127.0.0.1", 5649},   // admin
-        {"127.0.0.1", 5650});  // job
+        {"127.0.0.1", 5646},   // event (event_sub = 5647)
+        {"127.0.0.1", 5648},   // heartbeat pub (must != 5647)
+        {"127.0.0.1", 5649},   // heartbeat recv
+        {"127.0.0.1", 5650},   // admin
+        {"127.0.0.1", 5651});  // job
 
     engine.start_nonblocking();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -211,11 +212,11 @@ TEST(EngineIntegrationTest, HeartbeatManagerTracksModules) {
 TEST(EngineIntegrationTest, MonitorGCTopicQueues) {
     TycheEngine engine(
         {"127.0.0.1", 5655},   // reg
-        {"127.0.0.1", 5656},   // event
-        {"127.0.0.1", 5657},   // heartbeat pub
-        {"127.0.0.1", 5658},   // heartbeat recv
-        {"127.0.0.1", 5659},   // admin
-        {"127.0.0.1", 5660},   // job
+        {"127.0.0.1", 5656},   // event (event_sub = 5657)
+        {"127.0.0.1", 5658},   // heartbeat pub (must != 5657)
+        {"127.0.0.1", 5659},   // heartbeat recv
+        {"127.0.0.1", 5660},   // admin
+        {"127.0.0.1", 5661},   // job
         10000,                   // queue_capacity
         "data");                // data_dir
 
@@ -238,11 +239,11 @@ TEST(EngineIntegrationTest, MonitorGCTopicQueues) {
 TEST(EngineIntegrationTest, FullLifecycleStress) {
     TycheEngine engine(
         {"127.0.0.1", 5665},   // reg
-        {"127.0.0.1", 5666},   // event
-        {"127.0.0.1", 5667},   // heartbeat pub
-        {"127.0.0.1", 5668},   // heartbeat recv
-        {"127.0.0.1", 5669},   // admin
-        {"127.0.0.1", 5670});  // job
+        {"127.0.0.1", 5666},   // event (event_sub = 5667)
+        {"127.0.0.1", 5668},   // heartbeat pub (must != 5667)
+        {"127.0.0.1", 5669},   // heartbeat recv
+        {"127.0.0.1", 5670},   // admin
+        {"127.0.0.1", 5671});  // job
 
     engine.start_nonblocking();
 
@@ -287,6 +288,35 @@ TEST(EngineIntegrationTest, FullLifecycleStress) {
     for (int i = 0; i < 5; ++i) {
         engine.unregister_module("stress_mod_" + std::to_string(i));
     }
+
+    engine.stop();
+}
+
+// ── FastClock Calibration Integration ────────────────────────────────
+
+TEST(EngineIntegrationTest, FastClockCalibrationStartsWithEngine) {
+    // After engine starts, FastClock should be calibrated
+    tyche::TycheEngine engine(
+        {"127.0.0.1", 5675},   // reg
+        {"127.0.0.1", 5676},   // event
+        {"127.0.0.1", 5679},   // heartbeat pub
+        {"127.0.0.1", 5680},   // heartbeat recv
+        {"127.0.0.1", 5678},   // admin
+        {"127.0.0.1", 5684},   // job
+        100,
+        "data");
+
+    engine.start_nonblocking();
+
+    // Give calibration thread time to start and run at least one cycle
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    double t1 = tyche::FastClock::now();
+    EXPECT_GT(t1, 0.0) << "FastClock should return positive value after engine start";
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    double t2 = tyche::FastClock::now();
+    EXPECT_GE(t2, t1) << "FastClock should be monotonically increasing";
 
     engine.stop();
 }

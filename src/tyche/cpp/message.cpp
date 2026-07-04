@@ -5,6 +5,7 @@
 
 #include "tyche/cpp/message.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -37,9 +38,14 @@ void pack_any(msgpack::packer<msgpack::sbuffer>& pk, const std::any& value) {
     } else if (value.type() == typeid(Payload)) {
         const auto& map = std::any_cast<const Payload&>(value);
         pk.pack_map(static_cast<uint32_t>(map.size()));
-        for (const auto& [k, v] : map) {
+        // [FIX] Sort keys for deterministic wire format (Payload is unordered_map)
+        std::vector<std::string> keys;
+        keys.reserve(map.size());
+        for (const auto& [k, v] : map) keys.push_back(k);
+        std::sort(keys.begin(), keys.end());
+        for (const auto& k : keys) {
             pk.pack(k);
-            pack_any(pk, v);
+            pack_any(pk, map.at(k));
         }
     } else if (value.type() == typeid(std::vector<std::string>)) {
         const auto& vec = std::any_cast<const std::vector<std::string>&>(value);
@@ -142,10 +148,17 @@ std::vector<uint8_t> serialize(const Message& msg) {
     pk.pack(msg.event);
 
     pack_key(pk, "payload", 7);
-    pk.pack_map(static_cast<uint32_t>(msg.payload.size()));
-    for (const auto& [k, v] : msg.payload) {
-        pk.pack(k);
-        pack_any(pk, v);
+    // [FIX] Sort payload keys for deterministic wire format
+    {
+        std::vector<std::string> keys;
+        keys.reserve(msg.payload.size());
+        for (const auto& [k, v] : msg.payload) keys.push_back(k);
+        std::sort(keys.begin(), keys.end());
+        pk.pack_map(static_cast<uint32_t>(keys.size()));
+        for (const auto& k : keys) {
+            pk.pack(k);
+            pack_any(pk, msg.payload.at(k));
+        }
     }
 
     pack_key(pk, "recipient", 9);
@@ -323,10 +336,17 @@ BufferView serialize_tls(const Message& msg) noexcept {
     pk.pack(msg.event);
 
     pk.pack(std::string("payload"));
-    pk.pack_map(static_cast<uint32_t>(msg.payload.size()));
-    for (const auto& [k, v] : msg.payload) {
-        pk.pack(k);
-        pack_any(pk, v);
+    // [FIX] Sort payload keys for deterministic wire format
+    {
+        std::vector<std::string> keys;
+        keys.reserve(msg.payload.size());
+        for (const auto& [k, v] : msg.payload) keys.push_back(k);
+        std::sort(keys.begin(), keys.end());
+        pk.pack_map(static_cast<uint32_t>(keys.size()));
+        for (const auto& k : keys) {
+            pk.pack(k);
+            pack_any(pk, msg.payload.at(k));
+        }
     }
 
     pk.pack(std::string("recipient"));
@@ -390,10 +410,17 @@ size_t serialize_into(const Message& msg, uint8_t* buffer, size_t capacity) noex
     pk.pack(msg.event);
 
     pk.pack(std::string("payload"));
-    pk.pack_map(static_cast<uint32_t>(msg.payload.size()));
-    for (const auto& [k, v] : msg.payload) {
-        pk.pack(k);
-        pack_any(pk, v);
+    // [FIX] Sort payload keys for deterministic wire format
+    {
+        std::vector<std::string> keys;
+        keys.reserve(msg.payload.size());
+        for (const auto& [k, v] : msg.payload) keys.push_back(k);
+        std::sort(keys.begin(), keys.end());
+        pk.pack_map(static_cast<uint32_t>(keys.size()));
+        for (const auto& k : keys) {
+            pk.pack(k);
+            pack_any(pk, msg.payload.at(k));
+        }
     }
 
     pk.pack(std::string("recipient"));

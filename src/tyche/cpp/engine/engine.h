@@ -202,6 +202,10 @@ private:
     std::string _create_module_id(const std::string& family_name);
     bool _is_handler_available(const std::string& module_id, const std::string& topic) const;
     static double _now();
+
+    /// Fast monotonic clock for hot-path timestamps (~3ns).
+    /// Returns monotonic time (NOT epoch) — only for relative comparisons.
+    static double _now_fast() noexcept;
 };
 
 }  // namespace tyche
