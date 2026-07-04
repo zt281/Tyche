@@ -91,6 +91,12 @@ QuoteTick make_extreme_tick() {
         -0.0, 1.7e308, -1.7e308, 1e-15, INT32_MAX);
 }
 
+std::string tick_case_name(const QuoteTick& tick) {
+    if (tick.instrument_id[0] == '\0') return "empty";
+    if (tick.last_price > 1e14) return "extreme";
+    return "basic";
+}
+
 // Build a Payload from a QuoteTick mirroring tick_to_payload() / write_shm_quote_tick()
 // field mapping exactly.  This is the reference field mapping under test.
 tyche::Payload build_payload_from_tick(const QuoteTick& tick) {
@@ -194,11 +200,9 @@ TEST_P(ShmWireFormatTest, OldAndNewPathProduceIdenticalWireBytes) {
     const QuoteTick tick = GetParam();
     auto payload = build_payload_from_tick(tick);
 
-    // Unique SHM names per parameter to avoid cross-test interference
-    const auto idx = ::testing::UnitTest::GetInstance()
-                         ->current_test_info()
-                         ->value_param();
-    std::string suffix = (idx != nullptr) ? idx : "default";
+    // Keep POSIX shm names short and slash-free; gtest's value_param() string
+    // is a long object dump that can exceed shm_open name limits on Linux.
+    std::string suffix = tick_case_name(tick);
     std::string old_shm = "shm_wire_old_" + suffix;
     std::string new_shm = "shm_wire_new_" + suffix;
 

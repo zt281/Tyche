@@ -14,13 +14,20 @@
 namespace tyche {
 namespace {
 
+TycheEngine make_test_engine(int base_port) {
+    return TycheEngine(
+        {"127.0.0.1", base_port},
+        {"127.0.0.1", base_port + 1},
+        {"127.0.0.1", base_port + 3},
+        {"127.0.0.1", base_port + 4},
+        {"127.0.0.1", base_port + 5},
+        {"127.0.0.1", base_port + 6});
+}
+
 // ── Construction / Destruction ────────────────────────────────────────
 
 TEST(EngineTest, Construction) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(15550);
 
     EXPECT_FALSE(engine.is_running());
     EXPECT_NE(engine.shm_bridge(), nullptr);  // bridge is created in constructor
@@ -28,10 +35,7 @@ TEST(EngineTest, Construction) {
 
 TEST(EngineTest, DestructorStopsIfRunning) {
     {
-        TycheEngine engine(
-            {"127.0.0.1", 5555},
-            {"127.0.0.1", 5556},
-            {"127.0.0.1", 5557});
+        auto engine = make_test_engine(15650);
 
         engine.start_nonblocking();
         EXPECT_TRUE(engine.is_running());
@@ -42,10 +46,7 @@ TEST(EngineTest, DestructorStopsIfRunning) {
 }
 
 TEST(EngineTest, StopIdempotent) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(15750);
 
     engine.start_nonblocking();
     EXPECT_TRUE(engine.is_running());
@@ -61,10 +62,7 @@ TEST(EngineTest, StopIdempotent) {
 // ── Module Registration ───────────────────────────────────────────────
 
 TEST(EngineTest, RegisterModule) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(15850);
 
     ModuleInfo info;
     info.module_id = "test_mod_001";
@@ -80,10 +78,7 @@ TEST(EngineTest, RegisterModule) {
 }
 
 TEST(EngineTest, RegisterModuleWithAllPatterns) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(15950);
 
     ModuleInfo info;
     info.module_id = "multi_pattern_mod";
@@ -117,10 +112,7 @@ TEST(EngineTest, RegisterModuleWithAllPatterns) {
 }
 
 TEST(EngineTest, UnregisterModule) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16050);
 
     ModuleInfo info;
     info.module_id = "mod_to_remove";
@@ -139,10 +131,7 @@ TEST(EngineTest, UnregisterModule) {
 }
 
 TEST(EngineTest, RegisterDuplicateModuleId) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16150);
 
     ModuleInfo info;
     info.module_id = "dup_mod";
@@ -161,10 +150,7 @@ TEST(EngineTest, RegisterDuplicateModuleId) {
 // ── Event Injection ───────────────────────────────────────────────────
 
 TEST(EngineTest, InjectEvent) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16250);
 
     std::vector<uint8_t> data = {'h', 'e', 'l', 'l', 'o'};
     engine.inject_event("test_topic", data);
@@ -174,10 +160,7 @@ TEST(EngineTest, InjectEvent) {
 }
 
 TEST(EngineTest, InjectEventRaw) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16350);
 
     const uint8_t data[] = {'r', 'a', 'w'};
     engine.inject_event_raw("raw_topic", data, sizeof(data));
@@ -186,10 +169,7 @@ TEST(EngineTest, InjectEventRaw) {
 }
 
 TEST(EngineTest, InjectMultipleEvents) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16450);
 
     for (int i = 0; i < 100; ++i) {
         std::vector<uint8_t> data = {static_cast<uint8_t>(i)};
@@ -210,20 +190,14 @@ TEST(EngineTest, InjectMultipleEvents) {
 // ── SharedMemoryBridge access ───────────────────────────────────────
 
 TEST(EngineTest, ShmBridgeBeforeStart) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16550);
 
     // Before start, shm_bridge exists but bridge is not started
     EXPECT_NE(engine.shm_bridge(), nullptr);
 }
 
 TEST(EngineTest, ShmBridgeAfterStart) {
-    TycheEngine engine(
-        {"127.0.0.1", 5555},
-        {"127.0.0.1", 5556},
-        {"127.0.0.1", 5557});
+    auto engine = make_test_engine(16650);
 
     engine.start_nonblocking();
     EXPECT_NE(engine.shm_bridge(), nullptr);
