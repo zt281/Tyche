@@ -31,6 +31,8 @@ struct ShmModuleConfig {
 struct ShmBridgeConfig {
     std::string shm_queue_name;     // shared memory queue name
     std::string zmq_topic;          // ZMQ topic to forward to
+    uint32_t slot_count = 2048;     // SHM queue slot count (must match writer side)
+    uint32_t max_msg_size = 4096;   // SHM queue max message size (must match writer side)
 };
 
 // Bridges shared memory queues to the engine's ZMQ event system.

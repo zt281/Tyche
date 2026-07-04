@@ -15,4 +15,5 @@ endif()
 enable_testing()
 
 add_subdirectory(cpp)
+add_subdirectory(perf)
 add_subdirectory(unit/ctp_gateway)

@@ -23,7 +23,9 @@ public:
     // Fast path: read cached timestamp (updated by background thread every 1ms).
     // Uses memory_order_relaxed; suitable for enqueue_time, TTL checks.
     static double now() noexcept {
-        return _cached_ns.load(std::memory_order_relaxed) * 1e-9;
+        int64_t ns = _cached_ns.load(std::memory_order_relaxed);
+        if (ns == 0) return now_precise();
+        return ns * 1e-9;
     }
 
     // Precise path: directly query system clock.
@@ -42,7 +44,7 @@ public:
     static void calibrate() noexcept;
 
 private:
-    // Cached timestamp in nanoseconds (epoch relative to program start)
+    // Cached timestamp in monotonic nanoseconds since system boot
     static inline std::atomic<int64_t> _cached_ns{0};
 
     // Calibration thread control

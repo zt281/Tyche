@@ -200,5 +200,48 @@ TEST(SharedMemoryBridgeTest, WorkerLoopUsesAdaptiveSpin) {
     EXPECT_FALSE(bridge.is_running());
 }
 
+// ── ShmConfig Default & Custom Value Tests ──────────────────────────────
+
+TEST(ShmConfigTest, ModuleConfigDefaults) {
+    ShmModuleConfig mc;
+    EXPECT_EQ(mc.slot_count, 2048u);
+    EXPECT_EQ(mc.max_msg_size, 4096u);
+    EXPECT_TRUE(mc.library_path.empty());
+    EXPECT_TRUE(mc.shm_queue_name.empty());
+    EXPECT_TRUE(mc.zmq_topics.empty());
+}
+
+TEST(ShmConfigTest, BridgeConfigDefaults) {
+    ShmBridgeConfig bc;
+    EXPECT_EQ(bc.slot_count, 2048u);
+    EXPECT_EQ(bc.max_msg_size, 4096u);
+    EXPECT_TRUE(bc.shm_queue_name.empty());
+    EXPECT_TRUE(bc.zmq_topic.empty());
+}
+
+TEST(ShmConfigTest, ModuleConfigCustomValues) {
+    ShmModuleConfig mc;
+    mc.library_path = "modules/test.dll";
+    mc.shm_queue_name = "test_queue";
+    mc.slot_count = 512;
+    mc.max_msg_size = 2048;
+    mc.zmq_topics = {"tick", "quote"};
+
+    EXPECT_EQ(mc.slot_count, 512u);
+    EXPECT_EQ(mc.max_msg_size, 2048u);
+    EXPECT_EQ(mc.zmq_topics.size(), 2u);
+}
+
+TEST(ShmConfigTest, BridgeConfigCustomValues) {
+    ShmBridgeConfig bc;
+    bc.shm_queue_name = "external_queue";
+    bc.zmq_topic = "market_data";
+    bc.slot_count = 4096;
+    bc.max_msg_size = 8192;
+
+    EXPECT_EQ(bc.slot_count, 4096u);
+    EXPECT_EQ(bc.max_msg_size, 8192u);
+}
+
 }  // namespace
 }  // namespace tyche

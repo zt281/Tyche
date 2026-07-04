@@ -18,20 +18,23 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     if(MSVC)
         add_compile_options(/utf-8)
     endif()
-    # 独立构建时设置输出目录
+    # 独立构建时按功能×平台分发到 build/{unit_tests,perf_tests}/{win,linux}
     if(WIN32)
-        set(TYCHE_RUNTIME_DIR "${TYCHE_ROOT}/runtime/win")
+        set(TYCHE_PLATFORM "win")
     else()
-        set(TYCHE_RUNTIME_DIR "${TYCHE_ROOT}/runtime/linux")
+        set(TYCHE_PLATFORM "linux")
     endif()
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TYCHE_RUNTIME_DIR})
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${TYCHE_RUNTIME_DIR})
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${TYCHE_RUNTIME_DIR})
+    set(TYCHE_UNIT_TEST_DIR "${TYCHE_ROOT}/build/unit_tests/${TYCHE_PLATFORM}")
+    set(TYCHE_PERF_TEST_DIR "${TYCHE_ROOT}/build/perf_tests/${TYCHE_PLATFORM}")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TYCHE_UNIT_TEST_DIR})
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${TYCHE_UNIT_TEST_DIR})
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${TYCHE_UNIT_TEST_DIR})
     foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
         string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG_UPPER)
-        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_RUNTIME_DIR})
-        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_RUNTIME_DIR})
-        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_RUNTIME_DIR})
+        set(TYCHE_UNIT_TEST_CONFIG_DIR "${TYCHE_UNIT_TEST_DIR}/${OUTPUTCONFIG}")
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_UNIT_TEST_CONFIG_DIR})
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_UNIT_TEST_CONFIG_DIR})
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${TYCHE_UNIT_TEST_CONFIG_DIR})
     endforeach()
 else()
     message(STATUS "tests/cpp: subdirectory build mode (parent: ${CMAKE_SOURCE_DIR})")
@@ -130,7 +133,6 @@ set(TYCHE_TEST_SOURCES
     test_flat_message.cpp
     test_adaptive_spin.cpp
     test_fast_clock.cpp
-    test_object_pool.cpp
     test_topic_queue_index.cpp
     test_rcu_snapshot.cpp
     test_thread_affinity.cpp
@@ -146,6 +148,7 @@ set(TYCHE_TEST_SOURCES
     test_ctp_loader_integration.cpp
     test_engine_integration.cpp
     test_shm_wire_format.cpp
+    test_module_transport.cpp
 )
 
 set(CTP_LIB_SOURCES
@@ -157,6 +160,7 @@ set(CTP_LIB_SOURCES
 
 set(TYCHE_LIB_SOURCES
     ${TYCHE_SRC_DIR}/message.cpp
+    ${TYCHE_SRC_DIR}/module.cpp
     ${TYCHE_SRC_DIR}/engine/topic_queue.cpp
     ${TYCHE_SRC_DIR}/engine/sharded_topic_map.cpp
     ${TYCHE_SRC_DIR}/engine/heartbeat_manager.cpp
@@ -187,29 +191,9 @@ else()
     target_link_libraries(tyche_tests PRIVATE pthread)
 endif()
 
-# ── Performance benchmark executables ──
-# Note: Most perf benchmarks are defined in src/tyche/cpp/CMakeLists.txt
-# Only ring_buffer_bench is defined here as it has no TYCHE_LIB dependencies
-add_executable(ring_buffer_bench
-    ../perf/ring_buffer_bench.cpp
-)
-
-target_link_libraries(ring_buffer_bench PRIVATE
-    ${ZMQ_LIBRARY}
-)
-if(ZMQ_LIBRARIES)
-    target_link_libraries(ring_buffer_bench PRIVATE ${ZMQ_LIBRARIES})
-endif()
-
-if(WIN32)
-    target_link_libraries(ring_buffer_bench PRIVATE ws2_32 iphlpapi)
-else()
-    target_link_libraries(ring_buffer_bench PRIVATE pthread)
-endif()
-
 # ── CTest 集成 ──
 include(GoogleTest)
-gtest_discover_tests(tyche_tests)
+gtest_discover_tests(tyche_tests DISCOVERY_MODE POST_BUILD)
 
 # ── Stub libraries for integration tests ──
 add_subdirectory(stubs/stub_shm_lib EXCLUDE_FROM_ALL)

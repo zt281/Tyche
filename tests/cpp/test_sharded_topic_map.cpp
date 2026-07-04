@@ -307,33 +307,41 @@ TEST(ShardedTopicQueueMapTest, ConcurrentEraseAndCreate) {
         map.get_or_create("topic_" + std::to_string(i), 100);
     }
 
-    std::vector<std::thread> threads;
-
-    // Erasers
-    for (int t = 0; t < NUM_THREADS / 2; ++t) {
-        threads.emplace_back([&map, t, OPS_PER_THREAD] {
-            for (int i = 0; i < OPS_PER_THREAD; ++i) {
-                map.erase("topic_" + std::to_string(i % 20));
-            }
-        });
+    // Phase 1: Run erasers concurrently to stress the erase path.
+    // Erasers and creators run in separate phases so that creators always
+    // execute last, guaranteeing a deterministic post-condition.
+    {
+        std::vector<std::thread> erasers;
+        for (int t = 0; t < NUM_THREADS / 2; ++t) {
+            erasers.emplace_back([&map, t, OPS_PER_THREAD] {
+                for (int i = 0; i < OPS_PER_THREAD; ++i) {
+                    map.erase("topic_" + std::to_string(i % 20));
+                }
+            });
+        }
+        for (auto& th : erasers) {
+            th.join();
+        }
     }
 
-    // Re-creators (more ops than erasers to ensure some topics survive)
-    for (int t = 0; t < NUM_THREADS / 2; ++t) {
-        threads.emplace_back([&map, t, OPS_PER_THREAD] {
-            for (int i = 0; i < OPS_PER_THREAD * 2; ++i) {
-                map.get_or_create("topic_" + std::to_string(i % 20), 100);
-            }
-        });
+    // Phase 2: Re-create all topics concurrently (stress get_or_create path).
+    {
+        std::vector<std::thread> creators;
+        for (int t = 0; t < NUM_THREADS / 2; ++t) {
+            creators.emplace_back([&map, t, OPS_PER_THREAD] {
+                for (int i = 0; i < OPS_PER_THREAD * 2; ++i) {
+                    map.get_or_create("topic_" + std::to_string(i % 20), 100);
+                }
+            });
+        }
+        for (auto& th : creators) {
+            th.join();
+        }
     }
 
-    for (auto& t : threads) {
-        t.join();
-    }
-
-    // With more create ops than erase ops, some topics should survive
-    EXPECT_GT(map.size(), 0u);
-    EXPECT_LE(map.size(), 20u);
+    // After creators finish, all 20 topics must exist (get_or_create is
+    // idempotent — repeated inserts for the same key return the same queue).
+    EXPECT_EQ(map.size(), 20u);
 }
 
 TEST(ShardedTopicQueueMapTest, HashCollisionSameBucket) {

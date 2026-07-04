@@ -93,6 +93,41 @@ TEST_F(ConfigTest, MinimalValidConfig) {
     EXPECT_EQ(cfg.family_name, "ctp_gateway"); // default
     EXPECT_EQ(cfg.reconnect_interval_secs, 5);  // default
     EXPECT_EQ(cfg.static_data_timeout_secs, 15); // default
+    EXPECT_FALSE(cfg.use_shared_memory);
+    EXPECT_FALSE(cfg.enable_zmq_side_channel);
+    EXPECT_EQ(cfg.zmq_connect_retries, 30);
+    EXPECT_EQ(cfg.zmq_connect_retry_interval_ms, 500);
+}
+
+TEST_F(ConfigTest, ParsesHybridSharedMemoryTransport) {
+    std::string json = R"({
+        "gateway": {
+            "md_front": "tcp://1.1.1.1:1",
+            "broker_id": "b",
+            "user_id": "u",
+            "password": "p",
+            "dll_dir": "C:/dll",
+            "underlyings": {"SHFE": ["ag"]},
+            "use_shared_memory": true,
+            "shm_queue_name": "ctp_to_engine",
+            "enable_zmq_side_channel": true,
+            "zmq_connect_retries": 7,
+            "zmq_connect_retry_interval_ms": 250
+        },
+        "shm_tuning": {
+            "shm_slot_count": 1024,
+            "shm_max_msg_size": 8192
+        }
+    })";
+
+    auto cfg = GatewayConfig::from_file(make_file("hybrid_transport.json", json));
+    EXPECT_TRUE(cfg.use_shared_memory);
+    EXPECT_EQ(cfg.shm_queue_name, "ctp_to_engine");
+    EXPECT_TRUE(cfg.enable_zmq_side_channel);
+    EXPECT_EQ(cfg.zmq_connect_retries, 7);
+    EXPECT_EQ(cfg.zmq_connect_retry_interval_ms, 250);
+    EXPECT_EQ(cfg.shm_tuning.shm_slot_count, 1024u);
+    EXPECT_EQ(cfg.shm_tuning.shm_max_msg_size, 8192u);
 }
 
 // ── Invalid JSON ──────────────────────────────────────────────────────

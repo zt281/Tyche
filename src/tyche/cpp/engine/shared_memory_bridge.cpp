@@ -70,11 +70,11 @@ void SharedMemoryBridge::configure(std::vector<ShmModuleConfig> modules,
     for (auto& bc : bridges) {
         BridgeEntry entry;
         entry.queue = std::make_unique<SharedMemoryQueue>(
-            SharedMemoryQueue::Config{bc.shm_queue_name, 2048, 4096}, true);
+            SharedMemoryQueue::Config{bc.shm_queue_name, bc.slot_count, bc.max_msg_size}, true);
         entry.zmq_topic = bc.zmq_topic;
         if (entry.queue->is_valid()) {
             std::cerr << "[SharedMemoryBridge] Created bridge queue '" << bc.shm_queue_name
-                      << "' (slot_count=2048, max_msg_size=4096)" << std::endl;
+                      << "' (slot_count=" << bc.slot_count << ", max_msg_size=" << bc.max_msg_size << ")" << std::endl;
             std::lock_guard lock(_bridges_lock);
             _bridges.push_back(std::move(entry));
         } else {

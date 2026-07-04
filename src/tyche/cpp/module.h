@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -30,6 +31,14 @@
 #include "tyche/cpp/flat_message.h"
 
 namespace tyche {
+
+class SharedMemoryQueue;
+
+struct ModuleSharedMemoryQueueConfig {
+    std::string name;
+    uint32_t slot_count = 2048;
+    uint32_t max_msg_size = 4096;
+};
 
 class TycheModule {
 public:
@@ -52,6 +61,10 @@ public:
 
     // Start the module - returns once worker threads are up.
     virtual void start();
+
+    // Start only the ZMQ transport workers and optionally retry registration.
+    bool start_zmq_transport(int max_attempts = 1,
+                             int retry_interval_ms = 0);
 
     // Start the module - blocks until stop() is called.
     virtual void run();
@@ -82,6 +95,16 @@ public:
     //
     // Thread-safe; serializes the message and publishes via the PUB socket.
     void send_event(
+        const std::string& event,
+        const Payload& payload,
+        std::optional<std::string> recipient = std::nullopt);
+
+    void set_shared_memory_queue(SharedMemoryQueue* queue) noexcept;
+    bool open_shared_memory_queue(const ModuleSharedMemoryQueueConfig& config,
+                                  bool owner = false);
+    bool has_shared_memory_queue() const noexcept;
+
+    bool send_event_shared_memory(
         const std::string& event,
         const Payload& payload,
         std::optional<std::string> recipient = std::nullopt);
@@ -151,6 +174,8 @@ protected:
     // Discovered interfaces (populated by _register_handler / _register_producer).
     std::vector<Interface> _interfaces;
 
+    SharedMemoryQueue* shared_memory_queue() const noexcept;
+
 private:
     // Identity / configuration.
     std::string _family_name;
@@ -184,6 +209,10 @@ private:
     // so this header doesn't pull in cppzmq / msgpack-cxx.
     struct Impl;
     std::unique_ptr<Impl> _impl;
+
+    std::unique_ptr<SharedMemoryQueue> _owned_shared_memory_queue;
+    SharedMemoryQueue* _shared_memory_queue = nullptr;
+    mutable std::mutex _shared_memory_lock;
 
     // Implementation helpers (defined in module.cpp).
     bool _register_with_engine();
