@@ -1,5 +1,34 @@
 # Agent Cooperation Guide
 
+## Multi-Repository Architecture
+
+> **注意**: TycheEngine 已拆分为多仓库架构。本文档适用于 Tyche 聚合项目。
+
+### 仓库结构
+
+| 仓库 | 路径 | 职责 | 技术栈 |
+|------|------|------|--------|
+| TycheCore-CPP | `core/cpp` | C++ 引擎核心 | C++17, CMake |
+| TycheEngine-Python | `core/python` | Python 引擎核心 | Python 3.10+ |
+| ctp-gateway-cpp | `modules/ctp-gateway-cpp` | CTP 网关 | C++17, CMake |
+| static-data | `modules/static-data` | 静态数据服务 | Python 3.10+ |
+| TycheTUI | `tui` | 终端监控 | Python/Textual |
+| TycheApp | `app` | 桌面 GUI | Electron/Vue3 |
+
+### 开发工作流变更
+
+- 各子项目有独立的 CI 流水线、测试和构建
+- 跨仓库变更需要在各子仓库分别创建 PR
+- 聚合项目的 CI 确保子项目间的集成兼容性
+- 协议规范定义在 `docs/protocol/` 目录，各子仓库需遵循
+
+### 详细文档
+
+- [多仓库架构概览](docs/architecture/multi-repo-architecture.md)
+- [开发者指南](docs/architecture/developer-guide.md)
+- [从单体仓库迁移](docs/migration/from-monorepo.md)
+
+---
 
 ## Document Conventions
 
@@ -324,3 +353,14 @@ When implementation is complete and merged, invoke `superpowers:finishing-a-deve
 - **Reconnection logic:** Test Nexus disappearance/reappearance scenarios
 - **Configuration validation:** Cover edge cases and invalid input rejection
 - **Serialization round-trips:** Verify `Decimal` precision is preserved through encode/decode
+
+---
+
+## Current State
+
+> **架构变更**: 项目已从单体仓库迁移到多仓库架构。各子项目（core/cpp, core/python, modules/ctp-gateway-cpp, modules/static-data, tui, app）作为独立仓库以 Git 子模块方式集成在 Tyche 聚合项目中。
+
+- 各子仓库有独立的 CI 流水线、测试和构建配置
+- 聚合项目负责集成测试和协议规范管理
+- 通信协议规范统一在 `docs/protocol/` 目录定义
+- 详见 [多仓库架构文档](docs/architecture/multi-repo-architecture.md)
