@@ -1,3 +1,15 @@
+[submodule "tui"]
+	path = tui
+	url = https://github.com/zt281/TycheTUI.git
+[submodule "app"]
+	path = app
+	url = https://github.com/zt281/TycheApp.git
+
+# 以下子模块待各仓库推送到GitHub后，执行以下命令添加：
+# git submodule add https://github.com/zt281/TycheCore-CPP.git core/cpp
+# git submodule add https://github.com/zt281/TycheEngine-Python.git core/python
+# git submodule add https://github.com/zt281/ctp-gateway-cpp.git modules/ctp-gateway-cpp
+# git submodule add https://github.com/zt281/static-data.git modules/static-data
 [submodule "wiki"]
 	path = .qoder/repowiki/en
 	url = https://github.com/zt281/TycheEngine.wiki.git

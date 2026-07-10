@@ -1,4 +1,75 @@
-﻿name: CI
+﻿name: Tyche Integration CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install C++ build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential
+
+      - name: Build C++ Core
+        run: |
+          cd core/cpp
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          ctest --test-dir build --output-on-failure
+
+      - name: Install Python Core
+        run: |
+          cd core/python
+          pip install -e ".[dev]"
+
+      - name: Install Static Data Module
+        run: |
+          cd modules/static-data
+          pip install -e ".[dev]"
+
+      - name: Build CTP Gateway
+        run: |
+          cd modules/ctp-gateway-cpp
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCTP_USE_SUBMODULE=ON
+          cmake --build build --config Release
+
+      - name: Run Python tests
+        run: |
+          pytest core/python/tests/ -v
+          pytest modules/static-data/tests/ -v
+
+      - name: Run C++ tests
+        run: |
+          ctest --test-dir core/cpp/build --output-on-failure
+          ctest --test-dir modules/ctp-gateway-cpp/build --output-on-failure
+
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check docs consistency
+        run: |
+          echo "Checking documentation structure..."
+          ls -la docs/
+          ls -la docs/protocol/ || true
+          ls -la docs/sdk/ || true
+name: CI
 
 on:
   push:
