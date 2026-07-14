@@ -196,6 +196,11 @@ backtests/
 research/
 docker/clickhouse-data/
 
+# Local confidential development artifacts
+.planning/research/
+.agents/skills/
+*.pdb
+
 # Build directory: intermediate C++ build artifacts
 # build/ contains CMake cache, object files, and categorized output binaries
 # 按功能×平台分类的编译产物目录（由CMake统一管理）
